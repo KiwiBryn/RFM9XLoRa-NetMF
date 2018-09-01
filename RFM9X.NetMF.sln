@@ -1,8 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 14
-VisualStudioVersion = 14.0.25420.1
-MinimumVisualStudioVersion = 10.0.40219.1
+# Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "01.RegisterRead", "RegisterRead\01.RegisterRead.csproj", "{56AD02A4-9FFA-49B4-887F-8A4BB8339350}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "02.RegisterScan", "RegisterScan\02.RegisterScan.csproj", "{9DF7A8C5-80C6-4EDD-A450-28F171B27F5C}"

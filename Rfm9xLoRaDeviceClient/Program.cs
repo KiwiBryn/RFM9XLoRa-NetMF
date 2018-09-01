@@ -51,13 +51,13 @@ namespace devMobile.IoT.NetMF.Rfm9X.Client
          Debug.Print("Transmit-Done");
       }
 
-      static void rfm9XDevice_OnDataReceived(byte[] data)
+      static void rfm9XDevice_OnDataReceived(float packetSnr, int packetRssi, int rssi,  byte[] data)
       {
          try
          {
             string messageText = new string(UTF8Encoding.UTF8.GetChars(data));
 
-            Debug.Print("Received " + data.Length.ToString() + " byte message " + messageText);
+            Debug.Print(DateTime.UtcNow.ToString("HH:MM:ss") + "-Rfm9X PacketSnr " + packetSnr.ToString("F1") + " Packet RSSI " + packetRssi + "dBm RSSI " + rssi + "dBm = " + data.Length + " byte message " + @"""" + messageText + @"""") ;
          }
          catch (Exception ex)
          {

@@ -28,7 +28,7 @@ namespace devMobile.IoT.NetMF.ISM
    public sealed class Rfm9XDevice
    {
       public delegate void EventHandler();
-      public delegate void OnDataRecievedHandler(byte[] data);
+      public delegate void OnDataRecievedHandler(float packetSnr, int packetRssi, int rssi, byte[] data);
 
       // Registers from SemTech SX127X Datasheet
       private enum Registers : byte
@@ -41,7 +41,7 @@ namespace devMobile.IoT.NetMF.ISM
          RegFrMid = 0x7,
          RegFrLsb = 0x08,
          RegPAConfig = 0x09,
-         //RegPARamp = 0x0A, // not inlcuded as FSK/OOK functionality
+         //RegPARamp = 0x0A, // not included as FSK/OOK functionality
          RegOcp = 0x0B,
          RegLna = 0x0C,
          RegFifoAddrPtr = 0x0D,
@@ -55,9 +55,9 @@ namespace devMobile.IoT.NetMF.ISM
          // RegRxPacketCntValueMsb=0x16
          // RegRxPacketCntValueMsb=0x17
          // RegModemStat=0x18
-         // RegPktSnrVale=0x19
-         // RegPktRssiValue=0x1A
-         // RegRssiValue=0x1B
+         RegPktSnrValue=0x19,
+         RegPktRssiValue=0x1A,
+         RegRssiValue=0x1B,
          // RegHopChannel=0x1C
          RegModemConfig1 = 0x1D,
          RegModemConfig2 = 0x1E,
@@ -118,6 +118,9 @@ namespace devMobile.IoT.NetMF.ISM
       // Frequency configuration magic numbers from Semtech SX127X specs
       private const double RH_RF95_FXOSC = 32000000.0;
       private const double RH_RF95_FSTEP = RH_RF95_FXOSC / 524288.0;
+      private const double RFMidBandThreshold = 525000000.0; // Search for RF_MID_BAND_THRESH GitHub LoRaNet LoRaMac-node/src/boards/sx1276-board.h
+      private const int RssiAdjustmentHF = -157;
+      private const int RssiAdjustmentLF = -164;
 
       // RegFrMsb, RegFrMid, RegFrLsb
       private const double FrequencyDefault = 434000000.0;
@@ -299,13 +302,23 @@ namespace devMobile.IoT.NetMF.ISM
       // RegSyncWord Syncword default for public networks
       private const byte RegSyncWordDefault = 0x12;
 
+      // RegDioMapping1  
+  		[Flags] 
+  		public enum RegDioMapping1
+  		{ 
+  			Dio0RxDone = 0x00, 
+  			Dio0TxDone = 0x40, 
+  			Dio0CadDone = 0x80, 
+  		}
+
       // The Semtech ID Relating to the Silicon revision
       private const byte RegVersionValueExpected = 0x12;
 
 
-      public RegisterManager Rfm9XLoraModem = null; // FIx this later
-      private OutputPort ResetGpioPin = null;
-      private InterruptPort InterruptPin = null;
+      private readonly RegisterManager Rfm9XLoraModem = null;
+      private readonly Object Rfm9XRegFifoLock = new object();
+      private readonly OutputPort ResetGpioPin = null;
+      private readonly InterruptPort InterruptPin = null;
       private RegOpModeMode RegOpModeAfterInitialise = RegOpModeMode.Sleep;
       private double Frequency = FrequencyDefault;
       public event OnDataRecievedHandler OnDataReceived = delegate { };
@@ -531,7 +544,7 @@ namespace devMobile.IoT.NetMF.ISM
          }
 
          // TODO revist this split & move to onReceive function
-         Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, 0x00); // RegDioMapping1 0b00000000 DI0 RxReady & TxReady
+         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0RxDone);
 
          // Configure RegOpMode before returning
          SetMode(regOpModeAfterInitialise);
@@ -543,36 +556,80 @@ namespace devMobile.IoT.NetMF.ISM
          Rfm9XLoraModem.RegisterDump((byte)Registers.MinValue, (byte)Registers.MaxValue);
       }
 
-      [MethodImpl(MethodImplOptions.Synchronized)]
-      void InterruptPin_OnInterrupt(uint data1, uint data2, DateTime time)
+      private void ProcessTxDone(RegIrqFlags IrqFlags)
       {
-         RegIrqFlags IrqFlags = (RegIrqFlags)this.Rfm9XLoraModem.ReadByte((byte)Registers.RegIrqFlags);
-         //Debug.Print("RegIrqFlags " + ByteToHexString((byte)IrqFlags));
+         Debug.Assert(IrqFlags != 0);
+         this.SetMode(RegOpModeAfterInitialise);
 
-         if ((IrqFlags & RegIrqFlags.RxDone) == RegIrqFlags.RxDone)  // RxDone
+         OnTransmit.Invoke();
+      }
+
+      private void ProcessRxDone(RegIrqFlags IrqFlags)
+      {
+         byte[] messageBytes;
+         Debug.Assert(IrqFlags != 0);
+
+         // Extract the message from the RFM9X fifo, try and keep lock in place for the minimum possible time
+         lock (Rfm9XRegFifoLock)
          {
             byte currentFifoAddress = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegFifoRxCurrent);
-            this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifoAddrPtr, currentFifoAddress); // RegFifoAddrPtr
-            byte numberOfBytes = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegRxNbBytes); // RegRxNbBytes
+
+            this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifoAddrPtr, currentFifoAddress);
+
+            byte numberOfBytes = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegRxNbBytes);
 
             // Allocate buffer for message
-            byte[] messageBytes = new byte[numberOfBytes];
+            messageBytes = new byte[numberOfBytes];
 
             for (int i = 0; i < numberOfBytes; i++)
             {
-               messageBytes[i] = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegFifo); 
+               messageBytes[i] = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegFifo);
             }
-
-            OnDataReceived.Invoke(messageBytes);
          }
 
-         if ((IrqFlags & RegIrqFlags.TxDone) == RegIrqFlags.TxDone) 
+         // Get the RSSI HF vs. LF port adjustment section 5.5.5 RSSI and SNR in LoRa Mode
+         float packetSnr = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegPktSnrValue) * 0.25f;
+
+         int rssi = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegRssiValue);
+         if (Frequency > RFMidBandThreshold)
          {
-            this.SetMode(RegOpModeAfterInitialise);
-            OnTransmit.Invoke();
+            rssi = RssiAdjustmentHF + rssi;
+         }
+         else
+         {
+            rssi = RssiAdjustmentLF + rssi;
          }
 
-         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, 0x0);
+         int packetRssi = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegPktRssiValue);
+         if (Frequency > RFMidBandThreshold)
+         {
+            packetRssi = RssiAdjustmentHF + packetRssi;
+         }
+         else
+         {
+            packetRssi = RssiAdjustmentLF + packetRssi;
+         }
+
+         OnDataReceived?.Invoke( packetSnr, packetRssi, rssi, messageBytes);
+      }
+
+
+      [MethodImpl(MethodImplOptions.Synchronized)]
+      void InterruptPin_OnInterrupt(uint data1, uint data2, DateTime time)
+      {
+         RegIrqFlags irqFlags = (RegIrqFlags)this.Rfm9XLoraModem.ReadByte((byte)Registers.RegIrqFlags);
+
+         if ((irqFlags & RegIrqFlags.RxDone) == RegIrqFlags.RxDone)
+         {
+            ProcessRxDone(irqFlags);
+         }
+
+         if ((irqFlags & RegIrqFlags.TxDone) == RegIrqFlags.TxDone) 
+         {
+            ProcessTxDone(irqFlags);
+         }
+
+         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0RxDone);
          this.Rfm9XLoraModem.WriteByte((byte)Registers.RegIrqFlags, (byte)RegIrqFlags.ClearAll);
       }
 
@@ -580,20 +637,20 @@ namespace devMobile.IoT.NetMF.ISM
       {
          this.Rfm9XLoraModem.WriteByte(0x0E, 0x0); // RegFifoTxBaseAddress 
 
-         // Set the Register Fifo address pointer
-         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifoAddrPtr, 0x0);
-
-         foreach (byte b in messageBytes)
+         lock (Rfm9XRegFifoLock)
          {
-            this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifo, b);
+            // Set the Register Fifo address pointer
+            this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifoAddrPtr, 0x0);
+
+            foreach (byte b in messageBytes)
+            {
+               this.Rfm9XLoraModem.WriteByte((byte)Registers.RegFifo, b);
+            }
+
+            // Set the length of the message in the fifo
+            this.Rfm9XLoraModem.WriteByte((byte)Registers.RegPayloadLength, (byte)messageBytes.Length);
          }
-
-         // Set the length of the message in the fifo
-         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegPayloadLength, (byte)messageBytes.Length); // RegPayloadLength
-
-         // TODO need to set this based on RX/TX mode handlers. Set based on OnTransmit, onReceive != null
-         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, 0x40); // RegDioMapping1 0b00000000 DI0 RxReady & TxReady
-
+         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0TxDone); 
          SetMode(RegOpModeMode.Transmit);
       }
 
