@@ -12,13 +12,18 @@ The repo has the source code for the series of blog posts written as I built thi
 07. ReceiveInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part7/)
 08. TransmitInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part9/)
 09. ReceiveTransmitInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part9/)
-10. RefactorRegisterManager(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part10/)
-11. EnumAndMasks(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part11/)
-12. ReceiveTransmitEvents (https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part12/)
+10. RefactorRegisterManager
+11. EnumAndMasks
+12. ReceiveTransmitEvents
 
-Fully feature driver and sample application
+Fully featured driver and sample application
 Rfm9xLoRaDeviceClient 
 Rfm9XLoRaDevice
+
+Signal To Noise(SNR) and Receive Signal Strength Indication(RSSI) (https://blog.devmobile.co.nz/2018/09/01/rfm9xloradevice-snr-and-rssi-2/)
+
+Low Noise Amplifier(LNA) (https://blog.devmobile.co.nz/2018/09/01/rfm9xloradevice-netmf-lna/)
+
 
 There is also a parallel development project for .Net which is documented here (https://github.com/KiwiBryn/RFM9XLoRa-Net)
 
