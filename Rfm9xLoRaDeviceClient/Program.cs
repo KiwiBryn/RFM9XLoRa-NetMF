@@ -30,7 +30,7 @@ namespace devMobile.IoT.NetMF.Rfm9X.Client
          Rfm9XDevice rfm9XDevice = new Rfm9XDevice(Pins.GPIO_PIN_D10, Pins.GPIO_PIN_D9, Pins.GPIO_PIN_D2);
          byte MessageCount = Byte.MinValue;
 
-         rfm9XDevice.Initialise( Rfm9XDevice.RegOpModeMode.ReceiveContinuous, 915000000, paBoost: true, rxPayloadCrcOn: true);
+         rfm9XDevice.Initialise( Rfm9XDevice.RegOpModeMode.ReceiveContinuous, frequency:915000000, paBoost: true, rxPayloadCrcOn: true);
          rfm9XDevice.OnDataReceived += rfm9XDevice_OnDataReceived;
          rfm9XDevice.OnTransmit += rfm9XDevice_OnTransmit;
 

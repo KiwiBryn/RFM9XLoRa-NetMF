@@ -58,7 +58,7 @@ namespace devMobile.IoT.NetMF.ISM
          RegPktSnrValue=0x19,
          RegPktRssiValue=0x1A,
          RegRssiValue=0x1B,
-         // RegHopChannel=0x1C
+         RegHopChannel=0x1C,
          RegModemConfig1 = 0x1D,
          RegModemConfig2 = 0x1E,
          RegSymbTimeout = 0x1F,
@@ -198,6 +198,19 @@ namespace devMobile.IoT.NetMF.ISM
          ClearAll = 0xFF, // 0b11111111,
       }
 
+      [Flags]
+      enum RegHopChannelFlags : byte
+      {
+         PllTimeout = 0x80, // 0b10000000,
+         CrcOnPayload = 0x40, //0b01000000,
+      }
+
+      enum RegHopChannelMask : byte
+      {
+         PllTimeout = 0x80, // 0b10000000,
+         CrcOnPayload = 0x40, // 0b01000000,
+         FhssPresentChannel = 0x7F, //0b01111111,
+      }
       // RegModemConfig1
       public enum RegModemConfigBandwidth : byte
       {
@@ -321,6 +334,8 @@ namespace devMobile.IoT.NetMF.ISM
       private readonly InterruptPort InterruptPin = null;
       private RegOpModeMode RegOpModeAfterInitialise = RegOpModeMode.Sleep;
       private double Frequency = FrequencyDefault;
+      private bool RxDoneIgnoreIfCrcMissing = true;
+      private bool RxDoneIgnoreIfCrcInvalid = true;
       public event OnDataRecievedHandler OnDataReceived = delegate { };
       public event EventHandler OnTransmit = delegate { };
 
@@ -363,6 +378,7 @@ namespace devMobile.IoT.NetMF.ISM
 
       public void Initialise(RegOpModeMode regOpModeAfterInitialise, // RegOpMode
          double frequency = FrequencyDefault, // RegFrMsb, RegFrMid, RegFrLsb
+         bool rxDoneignoreIfCrcMissing = true, bool rxDoneignoreIfCrcInvalid = true,
          bool paBoost = false, byte maxPower = RegPAConfigMaxPowerDefault, byte outputPower = RegPAConfigOutputPowerDefault, // RegPaConfig
          bool ocpOn = true, byte ocpTrim = RegOcpOcpTrimDefault, // RegOcp
          RegLnaLnaGain lnaGain = LnaGainDefault, bool lnaBoost = false, // RegLna
@@ -381,6 +397,8 @@ namespace devMobile.IoT.NetMF.ISM
          byte syncWord = RegSyncWordDefault)
       {
          Frequency = frequency; // Store this away for RSSI adjustments
+         RxDoneIgnoreIfCrcMissing = rxDoneignoreIfCrcMissing;
+         RxDoneIgnoreIfCrcInvalid = rxDoneignoreIfCrcInvalid;
          RegOpModeAfterInitialise = regOpModeAfterInitialise;
 
          byte regVersionValue = Rfm9XLoraModem.ReadByte((byte)Registers.RegVersion);
@@ -553,7 +571,7 @@ namespace devMobile.IoT.NetMF.ISM
             Rfm9XLoraModem.WriteByte((byte)Registers.RegSyncWord, syncWord);
          }
 
-         // TODO revist this split & move to onReceive function
+         // TODO revisit this split & move to onReceive function
          this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0RxDone);
 
          // Configure RegOpMode before returning
@@ -578,6 +596,25 @@ namespace devMobile.IoT.NetMF.ISM
       {
          byte[] messageBytes;
          Debug.Assert(IrqFlags != 0);
+
+         // Check to see if payload has CRC 
+         if (RxDoneIgnoreIfCrcMissing)
+         {
+            byte regHopChannel = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegHopChannel);
+            if ((regHopChannel & (byte)RegHopChannelFlags.CrcOnPayload) != (byte)RegHopChannelFlags.CrcOnPayload)
+            {
+               return;
+            }
+         }
+
+         // Check to see if payload CRC is valid
+         if (RxDoneIgnoreIfCrcInvalid)
+         {
+            if (((byte)IrqFlags & (byte)RegIrqFlagsMask.PayLoadCrcErrorMask) == (byte)RegIrqFlagsMask.PayLoadCrcErrorMask)
+            {
+               return;
+            }
+         }
 
          // Extract the message from the RFM9X fifo, try and keep lock in place for the minimum possible time
          lock (Rfm9XRegFifoLock)
