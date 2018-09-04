@@ -28,7 +28,14 @@ namespace devMobile.IoT.NetMF.ISM
    public sealed class Rfm9XDevice
    {
       public delegate void EventHandler();
+#if ADDRESSED_MESSAGES_PAYLOAD
+      public delegate void OnDataRecievedHandler(byte[] address, float packetSnr, int packetRssi, int rssi, byte[] data);
+      public const byte AddressHeaderLength = 1 ;
+      public const byte AddressLengthMinimum = 1 ;
+      public const byte AddressLengthMaximum = 15 ;
+#else
       public delegate void OnDataRecievedHandler(float packetSnr, int packetRssi, int rssi, byte[] data);
+#endif
 
       // Registers from SemTech SX127X Datasheet
       private enum Registers : byte
@@ -332,10 +339,13 @@ namespace devMobile.IoT.NetMF.ISM
       private readonly Object Rfm9XRegFifoLock = new object();
       private readonly OutputPort ResetGpioPin = null;
       private readonly InterruptPort InterruptPin = null;
-      private RegOpModeMode RegOpModeAfterInitialise = RegOpModeMode.Sleep;
+      private RegOpModeMode RegOpModeModeDefault = RegOpModeMode.Sleep;
       private double Frequency = FrequencyDefault;
       private bool RxDoneIgnoreIfCrcMissing = true;
       private bool RxDoneIgnoreIfCrcInvalid = true;
+#if ADDRESSED_MESSAGES_PAYLOAD
+      private byte[] DeviceAddress = null ;
+#endif
       public event OnDataRecievedHandler OnDataReceived = delegate { };
       public event EventHandler OnTransmit = delegate { };
 
@@ -376,8 +386,7 @@ namespace devMobile.IoT.NetMF.ISM
          Thread.Sleep(100);
       }
 
-      public void Initialise(RegOpModeMode regOpModeAfterInitialise, // RegOpMode
-         double frequency = FrequencyDefault, // RegFrMsb, RegFrMid, RegFrLsb
+      public void Initialise( double frequency = FrequencyDefault, // RegFrMsb, RegFrMid, RegFrLsb
          bool rxDoneignoreIfCrcMissing = true, bool rxDoneignoreIfCrcInvalid = true,
          bool paBoost = false, byte maxPower = RegPAConfigMaxPowerDefault, byte outputPower = RegPAConfigOutputPowerDefault, // RegPaConfig
          bool ocpOn = true, byte ocpTrim = RegOcpOcpTrimDefault, // RegOcp
@@ -399,7 +408,6 @@ namespace devMobile.IoT.NetMF.ISM
          Frequency = frequency; // Store this away for RSSI adjustments
          RxDoneIgnoreIfCrcMissing = rxDoneignoreIfCrcMissing;
          RxDoneIgnoreIfCrcInvalid = rxDoneignoreIfCrcInvalid;
-         RegOpModeAfterInitialise = regOpModeAfterInitialise;
 
          byte regVersionValue = Rfm9XLoraModem.ReadByte((byte)Registers.RegVersion);
          if (regVersionValue != RegVersionValueExpected)
@@ -575,7 +583,7 @@ namespace devMobile.IoT.NetMF.ISM
          this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0RxDone);
 
          // Configure RegOpMode before returning
-         SetMode(regOpModeAfterInitialise);
+         SetMode(RegOpModeModeDefault);
       }
 
       public void RegisterDump()
@@ -587,14 +595,14 @@ namespace devMobile.IoT.NetMF.ISM
       private void ProcessTxDone(RegIrqFlags IrqFlags)
       {
          Debug.Assert(IrqFlags != 0);
-         this.SetMode(RegOpModeAfterInitialise);
+         this.SetMode(RegOpModeModeDefault);
 
          OnTransmit.Invoke();
       }
 
       private void ProcessRxDone(RegIrqFlags IrqFlags)
       {
-         byte[] messageBytes;
+         byte[] payloadBytes;
          Debug.Assert(IrqFlags != 0);
 
          // Check to see if payload has CRC 
@@ -626,13 +634,40 @@ namespace devMobile.IoT.NetMF.ISM
             byte numberOfBytes = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegRxNbBytes);
 
             // Allocate buffer for message
-            messageBytes = new byte[numberOfBytes];
+            payloadBytes = new byte[numberOfBytes];
 
             for (int i = 0; i < numberOfBytes; i++)
             {
-               messageBytes[i] = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegFifo);
+               payloadBytes[i] = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegFifo);
             }
          }
+
+#if ADDRESSED_MESSAGES_PAYLOAD
+         //check that message is long enough to contain header 
+         if (payloadBytes.Length < (AddressHeaderLength + AddressLengthMinimum + AddressLengthMinimum))
+         {
+            return;
+         }
+
+         int toAddressLength = (payloadBytes[0] >> 4) & 0xf;
+         int fromAddressLength = payloadBytes[0] & 0xf;
+         int messageLength = payloadBytes.Length - (AddressHeaderLength + toAddressLength + fromAddressLength);
+
+         // Make sure the to and local addresses are the same length
+         if (toAddressLength != DeviceAddress.Length)
+         {
+            return;
+         }
+
+         // Compare the bytes of the addresses
+         for (int index = 0; index < DeviceAddress.Length; index++)
+         {
+            if (DeviceAddress[index] != payloadBytes[index + AddressHeaderLength])
+            {
+               return;
+            }
+         }
+#endif
 
          // Get the RSSI HF vs. LF port adjustment section 5.5.5 RSSI and SNR in LoRa Mode
          float packetSnr = this.Rfm9XLoraModem.ReadByte((byte)Registers.RegPktSnrValue) * 0.25f;
@@ -657,9 +692,19 @@ namespace devMobile.IoT.NetMF.ISM
             packetRssi = RssiAdjustmentLF + packetRssi;
          }
 
-         OnDataReceived?.Invoke( packetSnr, packetRssi, rssi, messageBytes);
-      }
+#if ADDRESSED_MESSAGES_PAYLOAD
+         byte[] address = new byte[fromAddressLength];
+         Array.Copy(payloadBytes, AddressHeaderLength + toAddressLength, address, 0, fromAddressLength);
+         byte[] messageBytes = new byte[messageLength];
+         Array.Copy(payloadBytes, AddressHeaderLength + toAddressLength + fromAddressLength, messageBytes, 0, messageLength);
+#endif
 
+#if ADDRESSED_MESSAGES_PAYLOAD
+         OnDataReceived?.Invoke( address, packetSnr, packetRssi, rssi, messageBytes);
+#else
+         OnDataReceived?.Invoke( packetSnr, packetRssi, rssi, payloadBytes);
+#endif
+      }
 
       [MethodImpl(MethodImplOptions.Synchronized)]
       void InterruptPin_OnInterrupt(uint data1, uint data2, DateTime time)
@@ -680,7 +725,11 @@ namespace devMobile.IoT.NetMF.ISM
          this.Rfm9XLoraModem.WriteByte((byte)Registers.RegIrqFlags, (byte)RegIrqFlags.ClearAll);
       }
 
-      public void SendMessage(byte[] messageBytes)
+#if ADDRESSED_MESSAGES_PAYLOAD
+      private void Send(byte[] messageBytes)
+#else
+      public void Send(byte[] messageBytes)
+#endif
       {
          this.Rfm9XLoraModem.WriteByte(0x0E, 0x0); // RegFifoTxBaseAddress 
 
@@ -700,6 +749,50 @@ namespace devMobile.IoT.NetMF.ISM
          this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0TxDone); 
          SetMode(RegOpModeMode.Transmit);
       }
+
+#if ADDRESSED_MESSAGES_PAYLOAD
+		public void Send(byte[] addressBytes, byte[] messageBytes)
+		{
+			Debug.Assert(addressBytes != null);
+			Debug.Assert(addressBytes.Length > AddressLengthMinimum);
+			Debug.Assert(addressBytes.Length < AddressLengthMaximum);
+			Debug.Assert(messageBytes != null);
+			Debug.Assert(messageBytes.Length > 0);
+
+			// construct payload from lengths and addresses
+			byte[] payLoadBytes = new byte[AddressHeaderLength + addressBytes.Length + DeviceAddress.Length + messageBytes.Length];
+
+			byte toAddressLength = (byte)(addressBytes.Length << 4);
+			byte fromAddressLength = (byte)DeviceAddress.Length;
+			payLoadBytes[0] = (byte)(toAddressLength | fromAddressLength);
+
+			// copy across the to & from addresses
+			Array.Copy(addressBytes, 0, payLoadBytes, 1, addressBytes.Length);
+			Array.Copy(DeviceAddress, 0, payLoadBytes, 1 + addressBytes.Length, DeviceAddress.Length);
+
+			// copy across the payload
+			Array.Copy(messageBytes, 0, payLoadBytes, 1 + addressBytes.Length + DeviceAddress.Length, messageBytes.Length);
+
+			Send(payLoadBytes);
+		}
+
+		public void Receive( byte[] address )
+		{
+			Debug.Assert(address != null);
+			Debug.Assert(address.Length >= AddressLengthMinimum);
+			Debug.Assert(address.Length <= AddressLengthMaximum);
+			DeviceAddress = address;
+
+			RegOpModeModeDefault = RegOpModeMode.ReceiveContinuous ;
+			SetMode(RegOpModeMode.ReceiveContinuous);
+		}
+#else
+      public void Receive()
+      {
+         RegOpModeModeDefault = RegOpModeMode.ReceiveContinuous;
+         SetMode(RegOpModeMode.ReceiveContinuous);
+      }
+#endif
 
       private static string ByteToHexString(byte singlebyte)
       {
