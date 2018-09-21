@@ -28,9 +28,9 @@ namespace devMobile.IoT.NetMF.SPI
       private const byte RegisterAddressWriteMask = 0x80;
       private SPI Device = null;
 
-      public RegisterManager(Cpu.Pin chipSelect)
+      public RegisterManager(SPI.SPI_module spiModule, Cpu.Pin chipSelect)
       {
-         this.Device = new SPI(new SPI.Configuration(chipSelect, false, 0, 0, false, false, 500, SPI.SPI_module.SPI1));
+         this.Device = new SPI(new SPI.Configuration(chipSelect, false, 0, 0, false, false, 500, spiModule));
 
          Thread.Sleep(100);
       }

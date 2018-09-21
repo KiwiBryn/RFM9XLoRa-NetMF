@@ -322,13 +322,13 @@ namespace devMobile.IoT.NetMF.ISM
       private const byte RegSyncWordDefault = 0x12;
 
       // RegDioMapping1  
-  		[Flags] 
-  		public enum RegDioMapping1
-  		{ 
-  			Dio0RxDone = 0x00, 
-  			Dio0TxDone = 0x40, 
-  			Dio0CadDone = 0x80, 
-  		}
+      [Flags]
+      public enum RegDioMapping1
+      {
+         Dio0RxDone = 0x00,
+         Dio0TxDone = 0x40,
+         Dio0CadDone = 0x80,
+      }
 
       // The Semtech ID Relating to the Silicon revision
       private const byte RegVersionValueExpected = 0x12;
@@ -367,9 +367,9 @@ namespace devMobile.IoT.NetMF.ISM
          Rfm9XLoraModem.WriteByte((byte)Registers.RegOpMode, regOpModeValue);
       }
 
-      public Rfm9XDevice(Cpu.Pin chipSelect, Cpu.Pin resetPin, Cpu.Pin interruptPin)
+      public Rfm9XDevice(SPI.SPI_module spiModule, Cpu.Pin chipSelect, Cpu.Pin resetPin, Cpu.Pin interruptPin)
       {
-         this.Rfm9XLoraModem = new RegisterManager(chipSelect);
+         this.Rfm9XLoraModem = new RegisterManager(spiModule, chipSelect);
 
          // Factory reset pin configuration
          ResetGpioPin = new OutputPort(resetPin, true);
@@ -699,9 +699,9 @@ namespace devMobile.IoT.NetMF.ISM
 #endif
 
 #if ADDRESSED_MESSAGES_PAYLOAD
-         OnDataReceived?.Invoke( address, packetSnr, packetRssi, rssi, messageBytes);
+         OnDataReceived.Invoke( address, packetSnr, packetRssi, rssi, messageBytes);
 #else
-         OnDataReceived?.Invoke( packetSnr, packetRssi, rssi, payloadBytes);
+         OnDataReceived.Invoke( packetSnr, packetRssi, rssi, payloadBytes);
 #endif
       }
 
@@ -715,7 +715,7 @@ namespace devMobile.IoT.NetMF.ISM
             ProcessRxDone(irqFlags);
          }
 
-         if ((irqFlags & RegIrqFlags.TxDone) == RegIrqFlags.TxDone) 
+         if ((irqFlags & RegIrqFlags.TxDone) == RegIrqFlags.TxDone)
          {
             ProcessTxDone(irqFlags);
          }
@@ -745,46 +745,46 @@ namespace devMobile.IoT.NetMF.ISM
             // Set the length of the message in the fifo
             this.Rfm9XLoraModem.WriteByte((byte)Registers.RegPayloadLength, (byte)messageBytes.Length);
          }
-         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0TxDone); 
+         this.Rfm9XLoraModem.WriteByte((byte)Registers.RegDioMapping1, (byte)RegDioMapping1.Dio0TxDone);
          SetMode(RegOpModeMode.Transmit);
       }
 
 #if ADDRESSED_MESSAGES_PAYLOAD
-		public void Send(byte[] addressBytes, byte[] messageBytes)
-		{
-			Debug.Assert(addressBytes != null);
-			Debug.Assert(addressBytes.Length > AddressLengthMinimum);
-			Debug.Assert(addressBytes.Length < AddressLengthMaximum);
-			Debug.Assert(messageBytes != null);
-			Debug.Assert(messageBytes.Length > 0);
+      public void Send(byte[] addressBytes, byte[] messageBytes)
+      {
+         Debug.Assert(addressBytes != null);
+         Debug.Assert(addressBytes.Length > AddressLengthMinimum);
+         Debug.Assert(addressBytes.Length < AddressLengthMaximum);
+         Debug.Assert(messageBytes != null);
+         Debug.Assert(messageBytes.Length > 0);
 
-			// construct payload from lengths and addresses
-			byte[] payLoadBytes = new byte[AddressHeaderLength + addressBytes.Length + DeviceAddress.Length + messageBytes.Length];
+         // construct payload from lengths and addresses
+         byte[] payLoadBytes = new byte[AddressHeaderLength + addressBytes.Length + DeviceAddress.Length + messageBytes.Length];
 
-			byte toAddressLength = (byte)(addressBytes.Length << 4);
-			byte fromAddressLength = (byte)DeviceAddress.Length;
-			payLoadBytes[0] = (byte)(toAddressLength | fromAddressLength);
+         byte toAddressLength = (byte)(addressBytes.Length << 4);
+         byte fromAddressLength = (byte)DeviceAddress.Length;
+         payLoadBytes[0] = (byte)(toAddressLength | fromAddressLength);
 
-			// copy across the to & from addresses
-			Array.Copy(addressBytes, 0, payLoadBytes, 1, addressBytes.Length);
-			Array.Copy(DeviceAddress, 0, payLoadBytes, 1 + addressBytes.Length, DeviceAddress.Length);
+         // copy across the to & from addresses
+         Array.Copy(addressBytes, 0, payLoadBytes, 1, addressBytes.Length);
+         Array.Copy(DeviceAddress, 0, payLoadBytes, 1 + addressBytes.Length, DeviceAddress.Length);
 
-			// copy across the payload
-			Array.Copy(messageBytes, 0, payLoadBytes, 1 + addressBytes.Length + DeviceAddress.Length, messageBytes.Length);
+         // copy across the payload
+         Array.Copy(messageBytes, 0, payLoadBytes, 1 + addressBytes.Length + DeviceAddress.Length, messageBytes.Length);
 
-			Send(payLoadBytes);
-		}
+         Send(payLoadBytes);
+      }
 
-		public void Receive( byte[] address )
-		{
-			Debug.Assert(address != null);
-			Debug.Assert(address.Length >= AddressLengthMinimum);
-			Debug.Assert(address.Length <= AddressLengthMaximum);
-			DeviceAddress = address;
+      public void Receive( byte[] address )
+      {
+         Debug.Assert(address != null);
+         Debug.Assert(address.Length >= AddressLengthMinimum);
+         Debug.Assert(address.Length <= AddressLengthMaximum);
+         DeviceAddress = address;
 
-			RegOpModeModeDefault = RegOpModeMode.ReceiveContinuous ;
-			SetMode(RegOpModeMode.ReceiveContinuous);
-		}
+         RegOpModeModeDefault = RegOpModeMode.ReceiveContinuous ;
+         SetMode(RegOpModeMode.ReceiveContinuous);
+      }
 #else
       public void Receive()
       {

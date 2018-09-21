@@ -27,7 +27,7 @@ namespace devMobile.IoT.NetMF.Rfm9X.Client
    {
       public static void Main()
       {
-         Rfm9XDevice rfm9XDevice = new Rfm9XDevice(Pins.GPIO_PIN_D10, Pins.GPIO_PIN_D9, Pins.GPIO_PIN_D2);
+         Rfm9XDevice rfm9XDevice = new Rfm9XDevice( SPI_Devices.SPI1, Pins.GPIO_PIN_D10, Pins.GPIO_PIN_D9, Pins.GPIO_PIN_D2);
          byte MessageCount = Byte.MinValue;
 
          rfm9XDevice.Initialise( frequency:915000000, paBoost: true, rxPayloadCrcOn: true);
