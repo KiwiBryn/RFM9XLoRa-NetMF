@@ -3,14 +3,14 @@ A C# library for LoRa[@LoRaAlliance](https://lora-alliance.org/) connectivity fo
 
 The repo has the source code for the series of blog posts written as I built this library
 
-01. ShieldSPI (https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part1/)
-02. RegisterRead(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part2/)
-03. RegisterScan(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part3/)
-04. RegisterReadAndWrite(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part4/)
-05. TransmitBasic(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part5/)
-06. ReceiveBasic(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part6/)
-07. ReceiveInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part7/)
-08. TransmitInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part9/)
+01. ShieldSPI (https://blog.devmobile.co.nz/2018/08/16/net-microframework-lora-library-part1/)
+02. RegisterRead(https://blog.devmobile.co.nz/2018/08/17/net-microframework-lora-library-part2/)
+03. RegisterScan(https://blog.devmobile.co.nz/2018/08/18/net-microframework-lora-library-part3/)
+04. RegisterReadAndWrite(https://blog.devmobile.co.nz/2018/08/18/net-microframework-lora-library-part4/)
+05. TransmitBasic(https://blog.devmobile.co.nz/2018/08/19/net-microframework-lora-library-part5/)
+06. ReceiveBasic(https://blog.devmobile.co.nz/2018/08/19/net-microframework-lora-library-part6/)
+07. ReceiveInterrupt(https://blog.devmobile.co.nz/2018/08/20/net-microframework-lora-library-part7/)
+08. TransmitInterrupt(https://blog.devmobile.co.nz/2018/08/21/net-microframework-lora-library-part8/)
 09. ReceiveTransmitInterrupt(https://blog.devmobile.co.nz/2018/08/22/net-microframework-lora-library-part9/)
 10. RefactorRegisterManager
 11. EnumAndMasks
