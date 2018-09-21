@@ -23,7 +23,6 @@ namespace devMobile.IoT.NetMF.ISM
    using devMobile.IoT.NetMF.SPI;
    using Microsoft.SPOT;
    using Microsoft.SPOT.Hardware;
-   using SecretLabs.NETMF.Hardware.Netduino;
 
    public sealed class Rfm9XDevice
    {
@@ -373,7 +372,7 @@ namespace devMobile.IoT.NetMF.ISM
          this.Rfm9XLoraModem = new RegisterManager(chipSelect);
 
          // Factory reset pin configuration
-         ResetGpioPin = new OutputPort(Pins.GPIO_PIN_D9, true);
+         ResetGpioPin = new OutputPort(resetPin, true);
          ResetGpioPin.Write(false);
          Thread.Sleep(10);
          ResetGpioPin.Write(true);
